@@ -1,31 +1,39 @@
 # The City That Forgot the Moon 🌙
 
-A free, offline-friendly, third-person 3D exploration story for Android.
+An offline-friendly, third-person 3D exploration adventure for Android, using an original blocky, toy-like visual style inspired by sandbox adventure games.
 
 ![Game logo](assets/logo.svg)
 
 ## Chapter 1 — The Letter
-Chapter 1 has four simple stages, ordered from easy to hard:
 
-1. **The Quiet Street — Easy:** learn movement and find the first blue memory.
-2. **The Forgotten House — Easy–Medium:** uncover a clue about a key.
-3. **Strange Footprints — Medium:** follow the trail and collect another memory.
-4. **Meet Mira — Hard:** find the last memory and complete the chapter.
+Play as **Ari Vale**, a young courier with midnight-black block hair, a teal explorer jacket, coral scarf, dark trousers and boots, a navy satchel, and a glowing cyan lantern. Ari finds a mysterious letter on the night the moon vanishes.
 
-### Controls
-- Use the touchscreen joystick to walk.
-- Tap **INTERACT** near a glowing blue memory.
-- Tap **JOURNAL** to review your clues.
+### Clear controls
+1. Tap **BEGIN EXPLORATION** to start.
+2. Drag the round joystick at the bottom-left to walk.
+3. Follow the floating cyan lights.
+4. When a light is close, tap **INTERACT** to collect its memory.
+5. Tap **JOURNAL** to review your clues.
+6. Collect all three memories to finish Chapter 1.
 
-## Build the Android APK
-1. Open the **Actions** tab in this repository.
-2. Select **Build City Moon 3D APK**.
-3. Tap **Run workflow** (or wait for the automatic build after a push).
-4. Open the completed run and download the `city-moon-3d-debug-apk` artifact.
+### Chapter 1 stages — easy to hard
+1. **The Quiet Street — Easy:** learn movement and find the first memory.
+2. **The Forgotten House — Easy–Medium:** discover a clue about a hidden key.
+3. **Strange Footprints — Medium:** follow the trail and recover another memory.
+4. **Meet Mira — Hard:** uncover the final clue and complete the chapter.
 
-The workflow creates the Android WebView wrapper and packages the lightweight WebGL game. This is an early playable prototype, not a finished commercial-grade 3D game. Test the APK on your Android device before sharing it.
+## Android APK build
+1. Open the [GitHub Actions page](https://github.com/axdakkuu08-create/City_moon3d/actions).
+2. Open the newest **Build City Moon 3D APK** run.
+3. Wait until the run says **Success**.
+4. Open that run's **Artifacts** section.
+5. Download **city-moon-3d-debug-apk** and extract the ZIP to get the APK.
+6. Install it on your Android phone and test movement and interaction.
 
-## Files
-- `assets/logo.svg` — project logo
-- `chapter-1.json` — Chapter 1 stages, objectives, and clues
-- `.github/workflows/build-apk.yml` — Android APK build workflow
+A new build starts automatically after a push to `main`. The game is still a prototype; the graphics and controls should be tested on a real device before treating it as a finished release.
+
+## Project files
+- `assets/logo.svg` — moonlit city logo
+- `chapter-1.json` — stage order and clues
+- `character.json` — Ari Vale character guide
+- `.github/workflows/build-apk.yml` — generates the Android WebView project and APK
