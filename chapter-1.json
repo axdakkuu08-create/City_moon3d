@@ -1,0 +1,18 @@
+{
+  "title": "The Letter",
+  "chapter": 1,
+  "game": "The City That Forgot the Moon",
+  "controls": "Use the on-screen joystick to move. Tap INTERACT near a blue memory shard. Tap JOURNAL to review clues.",
+  "stages": [
+    {"number": 1, "name": "The Quiet Street", "difficulty": "Easy", "objective": "Learn movement and find the first blue memory.", "hint": "Follow the blue glow."},
+    {"number": 2, "name": "The Forgotten House", "difficulty": "Easy–Medium", "objective": "Discover a clue about a key and the missing moon.", "hint": "Keep exploring the street."},
+    {"number": 3, "name": "Strange Footprints", "difficulty": "Medium", "objective": "Follow the trail and recover another memory.", "hint": "The next blue light is farther away."},
+    {"number": 4, "name": "Meet Mira", "difficulty": "Hard", "objective": "Find the final memory and learn who remembers the moon.", "hint": "Search for the last blue light."}
+  ],
+  "collectibles": [
+    {"id": "memory-1", "clue": "The moon did not leave. It was hidden."},
+    {"id": "memory-2", "clue": "A tower bell rang beneath a red sky."},
+    {"id": "memory-3", "clue": "Find the tower beyond the river."}
+  ],
+  "ending": "A voice in the fog says: I remember the moon. Chapter 1 complete."
+}
