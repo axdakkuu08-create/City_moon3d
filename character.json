@@ -1,0 +1,21 @@
+{
+  "name": "Ari Vale",
+  "role": "Playable protagonist",
+  "age": 16,
+  "story": "Ari is a quiet young courier who knows the old streets. On the night the moon disappears, Ari finds a sealed letter in their satchel and follows blue memories to uncover what happened.",
+  "appearance": {
+    "style": "original blocky, toy-like 3D adventure avatar",
+    "hair": "short, messy midnight-black block hair",
+    "face": "warm medium-brown skin and simple dark eyes",
+    "outfit": "teal explorer jacket, coral-red scarf, charcoal trousers, dark boots",
+    "signature_item": "small navy courier satchel and a cyan memory lantern",
+    "silhouette": "large square head, compact torso, clearly separated block arms and legs"
+  },
+  "personality": ["curious", "kind", "brave when someone needs help"],
+  "goal_chapter_1": "Collect three blue memory fragments and discover the voice that remembers the moon.",
+  "controls": {
+    "move": "Drag the on-screen joystick on the left",
+    "interact": "Tap INTERACT while close to a cyan memory",
+    "clues": "Tap JOURNAL to read collected clues"
+  }
+}
