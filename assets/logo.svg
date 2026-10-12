@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+<title id="title">The City That Forgot the Moon</title><desc id="desc">A pale crescent moon above a mysterious midnight city.</desc>
+<defs><linearGradient id="sky" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#101b45"/><stop offset="1" stop-color="#070916"/></linearGradient><linearGradient id="moon" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#f8fdff"/><stop offset="1" stop-color="#7fe6ff"/></linearGradient><filter id="glow"><feGaussianBlur stdDeviation="9"/></filter></defs>
+<rect x="12" y="12" width="488" height="488" rx="92" fill="url(#sky)" stroke="#80dfff" stroke-opacity=".45" stroke-width="3"/>
+<circle cx="340" cy="135" r="62" fill="#73dfff" opacity=".24" filter="url(#glow)"/><path d="M354 65a73 73 0 1 0 76 112 65 65 0 0 1-76-112Z" fill="url(#moon)"/>
+<g fill="#18284d" stroke="#70c9f5" stroke-opacity=".35"><path d="M32 340h70v-88h35v88h24V220h48v120h28v-66h42v66h25V247h42v93h30v-55h42v55h61v135H32Z"/></g>
+<g fill="#7de7ff"><rect x="52" y="365" width="9" height="15" rx="2"/><rect x="78" y="365" width="9" height="15" rx="2"/><rect x="177" y="246" width="10" height="15" rx="2"/><rect x="197" y="246" width="10" height="15" rx="2"/><rect x="304" y="271" width="9" height="14" rx="2"/><rect x="324" y="271" width="9" height="14" rx="2"/><rect x="407" y="316" width="9" height="14" rx="2"/></g>
+<path d="M45 435h422" stroke="#80e7ff" stroke-width="2" stroke-opacity=".5"/><text x="256" y="466" text-anchor="middle" fill="#f1f7ff" font-family="Georgia,serif" font-size="18" letter-spacing="2">THE LOST MOON</text></svg>
