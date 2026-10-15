@@ -5,6 +5,7 @@ on:
   push:
     branches: [main]
     paths:
+      - 'city-moon-3d-project-upgraded.zip'
       - 'public/**'
       - 'android/**'
       - 'tools/test-source.mjs'
@@ -25,20 +26,40 @@ jobs:
       - name: Check out source
         uses: actions/checkout@v4
 
+      - name: Select project source
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -f public/index.html && -f android/settings.gradle.kts ]]; then
+            echo "PROJECT_ROOT=$GITHUB_WORKSPACE" >> "$GITHUB_ENV"
+            echo "Using project files at repository root."
+          elif [[ -f city-moon-3d-project-upgraded.zip ]]; then
+            PROJECT_ROOT="$GITHUB_WORKSPACE/.citymoon-project"
+            rm -rf "$PROJECT_ROOT"
+            mkdir -p "$PROJECT_ROOT"
+            unzip -q city-moon-3d-project-upgraded.zip -d "$PROJECT_ROOT"
+            if [[ ! -f "$PROJECT_ROOT/public/index.html" || ! -f "$PROJECT_ROOT/android/settings.gradle.kts" ]]; then
+              echo "::error::The uploaded ZIP does not contain public/ and android/ at its root."
+              exit 1
+            fi
+            echo "PROJECT_ROOT=$PROJECT_ROOT" >> "$GITHUB_ENV"
+            echo "Using the upgraded project extracted from the repository ZIP."
+          else
+            echo "::error::Missing upgraded source. Upload city-moon-3d-project-upgraded.zip to the repository root, or import its public/ and android/ folders."
+            exit 1
+          fi
+
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
 
-      - name: Validate project layout, JavaScript and offline assets
+      - name: Validate JavaScript and offline assets
         shell: bash
         run: |
           set -euo pipefail
-          if [[ ! -f public/index.html || ! -f android/settings.gradle.kts ]]; then
-            echo "::error::The upgraded project source has not been imported into the repository root yet."
-            echo "Import public/, android/, tools/test-source.mjs, and PLAN.md from city-moon-3d-project-upgraded.zip, preserving their paths."
-            exit 1
-          fi
+          cd "$PROJECT_ROOT"
+          test -f public/index.html
           test -f android/app/src/main/java/com/citymoon/game/MainActivity.kt
           for file in public/src/*.js tools/test-source.mjs; do
             node --check "$file"
@@ -67,6 +88,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          cd "$PROJECT_ROOT"
           test -f public/vendor/three.module.js
           test -f public/vendor/addons/loaders/GLTFLoader.js
           test -f public/assets/characters/character-male-a.glb
@@ -78,13 +100,13 @@ jobs:
           test -f android/app/src/main/assets/www/assets/characters/character-male-a.glb
 
       - name: Build debug APK
-        run: gradle -p android --no-daemon clean assembleDebug
+        run: gradle -p "$PROJECT_ROOT/android" --no-daemon clean assembleDebug
 
       - name: Verify APK exists and is non-empty
         shell: bash
         run: |
           set -euo pipefail
-          APK='android/app/build/outputs/apk/debug/app-debug.apk'
+          APK="$PROJECT_ROOT/android/app/build/outputs/apk/debug/app-debug.apk"
           test -s "$APK"
           ls -lh "$APK"
 
@@ -92,6 +114,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: city-moon-3d-debug-apk
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          path: ${{ env.PROJECT_ROOT }}/android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 14
