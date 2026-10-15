@@ -1,171 +1,97 @@
 name: Build City Moon 3D APK
 
 on:
+  workflow_dispatch:
   push:
     branches: [main]
-  workflow_dispatch:
+    paths:
+      - 'public/**'
+      - 'android/**'
+      - 'tools/test-source.mjs'
+      - 'PLAN.md'
 
 permissions:
   contents: read
 
+concurrency:
+  group: city-moon-apk-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  build:
+  validate-and-build:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
-      - name: Checkout repository
+      - name: Check out source
         uses: actions/checkout@v4
 
-      - name: Set up Java
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Validate project layout, JavaScript and offline assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ ! -f public/index.html || ! -f android/settings.gradle.kts ]]; then
+            echo "::error::The upgraded project source has not been imported into the repository root yet."
+            echo "Import public/, android/, tools/test-source.mjs, and PLAN.md from city-moon-3d-project-upgraded.zip, preserving their paths."
+            exit 1
+          fi
+          test -f android/app/src/main/java/com/citymoon/game/MainActivity.kt
+          for file in public/src/*.js tools/test-source.mjs; do
+            node --check "$file"
+          done
+          node tools/test-source.mjs
+
+      - name: Set up Java 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
+          cache: gradle
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
-        with:
-          packages: 'platform-tools platforms;android-35 build-tools;35.0.0'
 
-      - name: Generate Android WebView game project
+      - name: Install Android platform and build tools
+        run: sdkmanager 'platforms;android-34' 'build-tools;34.0.0' 'platform-tools'
+
+      - name: Set up Gradle 8.7
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+
+      - name: Package the actual Three.js game for offline WebView
         shell: bash
         run: |
-          mkdir -p app/src/main/java/com/citymoon/game app/src/main/assets/game-assets app/src/main/res/values
-          cp -R assets/. app/src/main/assets/game-assets/
-          cat > settings.gradle <<'EOF'
-          pluginManagement { repositories { google(); mavenCentral(); gradlePluginPortal() } }
-          dependencyResolutionManagement { repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS); repositories { google(); mavenCentral() } }
-          rootProject.name = 'CityMoon3D'
-          include ':app'
-          EOF
-          cat > build.gradle <<'EOF'
-          plugins {
-              id 'com.android.application' version '8.7.3' apply false
-          }
-          EOF
-          cat > gradle.properties <<'EOF'
-          org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8
-          android.useAndroidX=true
-          EOF
-          cat > app/build.gradle <<'EOF'
-          plugins { id 'com.android.application' }
-          android {
-              namespace 'com.citymoon.game'
-              compileSdk 35
-              defaultConfig {
-                  applicationId 'com.citymoon.game'
-                  minSdk 23
-                  targetSdk 28
-                  versionCode 1
-                  versionName '1.0'
-              }
-          }
-          EOF
-          cat > app/src/main/AndroidManifest.xml <<'EOF'
-          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-            <application android:theme="@style/AppTheme" android:label="The City That Forgot the Moon" android:usesCleartextTraffic="false">
-              <activity android:name=".MainActivity" android:exported="true" android:screenOrientation="sensorLandscape">
-                <intent-filter>
-                  <action android:name="android.intent.action.MAIN" />
-                  <category android:name="android.intent.category.LAUNCHER" />
-                </intent-filter>
-              </activity>
-            </application>
-          </manifest>
-          EOF
-          cat > app/src/main/res/values/styles.xml <<'EOF'
-          <resources><style name="AppTheme" parent="@android:style/Theme.Material.NoActionBar"><item name="android:fontFamily">sans</item><item name="android:windowLightStatusBar">false</item><item name="android:colorAccent">#ef5b78</item><item name="android:windowActionModeOverlay">true</item><item name="android:windowBackground">#080b1b</item></style></resources>
-          EOF
-          cat > app/src/main/java/com/citymoon/game/MainActivity.java <<'EOF'
-          package com.citymoon.game;
-          import android.app.Activity;
-          import android.os.Bundle;
-          import android.webkit.WebSettings;
-          import android.webkit.WebView;
-          import android.webkit.WebViewClient;
-          import android.view.View;
-          public class MainActivity extends Activity {
-            @Override public void onCreate(Bundle b) {
-              super.onCreate(b);
-              getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_FULLSCREEN | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY);
-              WebView w = new WebView(this);
-              w.setBackgroundColor(0xff080b1b);
-              WebSettings s = w.getSettings(); s.setJavaScriptEnabled(true); s.setDomStorageEnabled(true); s.setAllowFileAccess(true);
-              w.setWebViewClient(new WebViewClient());
-              setContentView(w); w.loadUrl("file:///android_asset/index.html");
-            }
-          }
-          EOF
-          cat > app/src/main/assets/index.html <<'EOF'
-          <!doctype html>
-          <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"><title>The City That Forgot the Moon</title>
-          <style>
-          *{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#080b19;color:#fff;font-family:system-ui}canvas{display:block;width:100%;height:100%;touch-action:none}#hud{position:fixed;inset:0;pointer-events:none;background:linear-gradient(#060919a8,transparent 24%,transparent 70%,#06091980)}#top{padding:14px 16px;text-shadow:0 2px 8px #000}h1{font-size:clamp(16px,3.6vw,25px);margin:0;color:#ffdce8}#objective{font-size:12px;color:#d5d6f8;margin-top:4px} .panel{position:absolute;left:50%;bottom:16px;transform:translateX(-50%);width:min(88vw,480px);background:linear-gradient(#10162be8,#10162bdc),url('game-assets/city-skyline.svg') center 56%/cover;border:1px solid #f16b9b80;border-radius:14px;padding:12px 15px;text-align:center;font-size:13px;box-shadow:0 8px 35px #0008}button{pointer-events:auto;border:1px solid #ffc1d5;background:#e95d8a;color:#160c20;border-radius:18px;padding:9px 15px;font-weight:700;margin:4px}#stick{position:absolute;left:20px;bottom:24px;width:118px;height:118px;border-radius:50%;border:2px solid #d9d8ff75;background:#aabaff1b;pointer-events:auto;touch-action:none;box-shadow:inset 0 0 20px #889bff20}#nub{position:absolute;width:48px;height:48px;left:33px;top:33px;border-radius:50%;background:#c9d5ff8c;border:1px solid #e6e8ff}#actions{position:absolute;right:16px;bottom:28px;display:flex;flex-direction:column;align-items:center;gap:6px}#actions button{width:100px;min-height:45px;background:#171c37df;color:#fff;border-color:#9e9edb}#hint{position:absolute;right:14px;top:16px;font-size:11px;line-height:1.55;text-align:right;color:#e4e8ff;background:#111a35c9;border:1px solid #94baff55;border-radius:10px;padding:9px 11px;max-width:190px}#toast{font-size:12px;color:#ffdae6;min-height:17px}
-          </style></head><body>
-          <canvas id="game"></canvas><div id="hud"><div id="top"><h1><img src="game-assets/moon-fragment.svg" alt="" style="width:25px;height:25px;vertical-align:middle;filter:drop-shadow(0 0 7px #5edfff)"> THE CITY THAT FORGOT THE MOON</h1><div id="objective">CHAPTER 1 · THE LETTER · Stage 1/4: Find the blue light</div></div><div id="hint"><b>HOW TO PLAY</b><br>1. Drag the left circle to walk<br>2. Follow cyan lights<br>3. Tap INTERACT nearby<br>4. Tap JOURNAL for clues</div><div id="stick"><div id="nub"></div></div><div id="actions"><button id="interact">INTERACT</button><button id="journal">JOURNAL</button></div><div class="panel"><div id="story"><img src="game-assets/lantern.svg" alt="Ari's lantern" style="width:34px;height:34px;float:left;margin:0 8px 2px 0"> <b>YOUR MISSION</b><br>Seven nights ago, the moon vanished. You are Ari Vale, a young courier carrying a mysterious letter. Find the glowing memory to begin.</div><div id="toast"></div><button id="start">BEGIN EXPLORATION</button></div></div>
-          <script>
-          (function(){
-          const canvas=document.getElementById('game'),gl=canvas.getContext('webgl',{antialias:true,alpha:false});
-          if(!gl){document.getElementById('story').textContent='WebGL is not supported on this device. Try updating Android System WebView.';return}
-          const vs='attribute vec3 aPos; attribute vec3 aCol; uniform mat4 uMVP; varying vec3 vCol; void main(){gl_Position=uMVP*vec4(aPos,1.0);vCol=aCol;}';
-          const fs='precision mediump float; varying vec3 vCol; void main(){gl_FragColor=vec4(vCol,1.0);}';
-          function sh(type,src){const s=gl.createShader(type);gl.shaderSource(s,src);gl.compileShader(s);if(!gl.getShaderParameter(s,gl.COMPILE_STATUS))throw Error(gl.getShaderInfoLog(s));return s}
-          const p=gl.createProgram();gl.attachShader(p,sh(gl.VERTEX_SHADER,vs));gl.attachShader(p,sh(gl.FRAGMENT_SHADER,fs));gl.linkProgram(p);gl.useProgram(p);
-          const ap=gl.getAttribLocation(p,'aPos'),ac=gl.getAttribLocation(p,'aCol'),um=gl.getUniformLocation(p,'uMVP');
-          function matMul(a,b){let o=new Float32Array(16);for(let c=0;c<4;c++)for(let r=0;r<4;r++)o[c*4+r]=a[r]*b[c*4]+a[4+r]*b[c*4+1]+a[8+r]*b[c*4+2]+a[12+r]*b[c*4+3];return o}
-          function perspective(fovy,aspect,near,far){let f=1/Math.tan(fovy/2),nf=1/(near-far);return new Float32Array([f/aspect,0,0,0,0,f,0,0,0,0,(far+near)*nf,-1,0,0,2*far*near*nf,0])}
-          function look(eye,center,up){let z=norm(sub(eye,center)),x=norm(cross(up,z)),y=cross(z,x);return new Float32Array([x[0],y[0],z[0],0,x[1],y[1],z[1],0,x[2],y[2],z[2],0,-dot(x,eye),-dot(y,eye),-dot(z,eye),1])}
-          function sub(a,b){return[a[0]-b[0],a[1]-b[1],a[2]-b[2]]}function dot(a,b){return a[0]*b[0]+a[1]*b[1]+a[2]*b[2]}function cross(a,b){return[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]]}function norm(a){let l=Math.hypot(...a)||1;return a.map(v=>v/l)}
-          function model(x,y,z,sx,sy,sz){return new Float32Array([sx,0,0,0,0,sy,0,0,0,0,sz,0,x,y,z,1])}
-          function cubeData(){let v=[],c=[];const faces=[[[0,0,1],[-1,-1,1],[1,-1,1],[1,1,1],[-1,1,1]],[[0,0,-1],[1,-1,-1],[-1,-1,-1],[-1,1,-1],[1,1,-1]],[[0,1,0],[-1,1,1],[1,1,1],[1,1,-1],[-1,1,-1]],[[0,-1,0],[-1,-1,-1],[1,-1,-1],[1,-1,1],[-1,-1,1]],[[1,0,0],[1,-1,1],[1,-1,-1],[1,1,-1],[1,1,1]],[[-1,0,0],[-1,-1,-1],[-1,-1,1],[-1,1,1],[-1,1,-1]]];for(const f of faces){let q=[f[1],f[2],f[3],f[1],f[3],f[4]];for(const pt of q){v.push(...pt);c.push(1,1,1)}}return {v,c}}
-          const cube=cubeData(),vb=gl.createBuffer(),cb=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,vb);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(cube.v),gl.STATIC_DRAW);gl.enableVertexAttribArray(ap);gl.vertexAttribPointer(ap,3,gl.FLOAT,false,0,0);gl.bindBuffer(gl.ARRAY_BUFFER,cb);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(cube.c),gl.STATIC_DRAW);gl.enableVertexAttribArray(ac);gl.vertexAttribPointer(ac,3,gl.FLOAT,false,0,0);
-          function drawCube(viewProj,pos,size,color,glow){let m=model(pos[0],pos[1],pos[2],size[0],size[1],size[2]);gl.uniformMatrix4fv(um,false,matMul(viewProj,m));let verts=new Float32Array(cube.c.length),shade=[.78,.58,1,.48,.88,.68],boost=glow||1;for(let i=0;i<verts.length;i+=3){let face=Math.floor(i/18),k=shade[face]*boost;verts[i]=Math.min(1,color[0]*k);verts[i+1]=Math.min(1,color[1]*k);verts[i+2]=Math.min(1,color[2]*k)}gl.bindBuffer(gl.ARRAY_BUFFER,cb);gl.bufferData(gl.ARRAY_BUFFER,verts,gl.DYNAMIC_DRAW);gl.drawArrays(gl.TRIANGLES,0,36)}
-          let player={x:0,z:4,angle:0},camYaw=0,joy={x:0,y:0},moving=false,started=false,shards=0,walkTime=0;
-          const buildings=[];for(let z=-17;z<14;z+=4){for(const side of [-1,1]){let seed=Math.abs(Math.sin(z*12+side*8)),h=2.5+seed*5;buildings.push({x:side*(4.5+seed*2),z:z+(seed-.5)*1.2,w:1.7+seed*.7,h,d:2.5+seed,color:side<0?[.14,.18,.34]:[.22,.13,.31]})}}
-          const shardsPos=[[-2,-5],[2,-13],[1,7]],lanterns=[[-2,-2],[2,-9],[-2,10]];
-          function render(){const dpr=Math.min(devicePixelRatio||1,1.7),w=Math.floor(innerWidth*dpr),h=Math.floor(innerHeight*dpr);if(canvas.width!==w||canvas.height!==h){canvas.width=w;canvas.height=h;gl.viewport(0,0,w,h)}gl.enable(gl.DEPTH_TEST);gl.clearColor(.025,.035,.095,1);gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
-          const f=perspective(Math.PI/3,h? w/h:1,.1,90),eye=[player.x+Math.sin(camYaw)*7,5.2,player.z+Math.cos(camYaw)*7],center=[player.x,1.2,player.z-1.5],vp=matMul(f,look(eye,center,[0,1,0]));
-          drawCube(vp,[0,-.25,-2],[8,.2,24],[.08,.1,.19]);for(let z=-24;z<22;z+=2)drawCube(vp,[0,-.12,z],[.045,.025,1],[.15,.18,.3]);for(let x=-3;x<=3;x+=2)drawCube(vp,[x,-.11,0],[.025,.025,24],[.1,.13,.23]);
-          // Block-built crescent, distant skyline, and stars add depth to the moonlit city.
-          drawCube(vp,[-5.6,8,-18],[1.05,1.05,.12],[.42,.83,1],1.25);drawCube(vp,[-5.15,8.35,-17.82],[.86,.9,.15],[.025,.035,.095]);
-          for(let i=0;i<18;i++){let sx=-10+(i*1.37)%20,sz=-24+(i*3.1)%18,sy=5+(i%5)*.72;drawCube(vp,[sx,sy,sz],[.035,.035,.035],[.45,.68,1],1.25)}
-          for(let i=0;i<10;i++){let sx=-10+i*2.2,sz=-22-(i%3)*1.7,hh=1.2+(i*7%5)*.55;drawCube(vp,[sx,hh/2,sz],[.65,hh/2,.55],[.075,.095,.19]);drawCube(vp,[sx,hh+.04,sz],[.67,.05,.57],[.16,.21,.38])}
-          for(const b of buildings){drawCube(vp,[b.x,b.h/2-.1,b.z],[b.w,b.h/2,b.d],[...b.color]);drawCube(vp,[b.x,b.h+.02,b.z],[b.w*1.02,.07,b.d*1.02],[.4,.2,.4]);for(let y=1;y<b.h;y+=1.25){drawCube(vp,[b.x+(b.x>0?-.35:.35),y,b.z-b.d*.51],[.08,.28,.025],[.25,.58,.95],1.4)}} 
-          drawCube(vp,[5,6,-18],[.02,1.2,.02],[.3,.22,.4]);drawCube(vp,[5,7.3,-18],[.8,.8,.8],[.95,.14,.34],1.2);
-          for(let i=0;i<lanterns.length;i++){let q=lanterns[i];drawCube(vp,[q[0],1.3,q[1]],[.12,.5,.12],[.24,.16,.25]);drawCube(vp,[q[0],1.65,q[1]],[.2,.24,.2],[.2,.8,1],1.7)}
-          for(let i=0;i<shardsPos.length;i++){if(i<shards)continue;let q=shardsPos[i],pulse=1+Math.sin(performance.now()*.004+i)*.13;drawCube(vp,[q[0],.8+Math.sin(performance.now()*.002+i)*.18,q[1]],[.18*pulse,.18*pulse,.18*pulse],[.3,.85,1],1.5)}
-          // Ari Vale: original blocky adventure hero with hair, face, scarf, satchel and lantern.
-          const bob=moving?Math.abs(Math.sin(walkTime*5))*.075:0,swing=moving?Math.sin(walkTime*5)*.12:0;
-          drawCube(vp,[player.x,.9+bob,player.z],[.38,.58,.27],[.055,.34,.39]); // teal jacket
-          drawCube(vp,[player.x,1.58+bob,player.z],[.27,.29,.25],[.72,.48,.34]); // face
-          drawCube(vp,[player.x,1.79+bob,player.z-.005],[.29,.12,.27],[.045,.055,.1]); // dark hair cap
-          drawCube(vp,[player.x-.19,1.66+bob,player.z+.13],[.08,.15,.14],[.045,.055,.1]);
-          drawCube(vp,[player.x+.19,1.66+bob,player.z+.13],[.08,.12,.14],[.045,.055,.1]);
-          drawCube(vp,[player.x-.085,1.59+bob,player.z+.255],[.035,.045,.018],[.025,.035,.06]);drawCube(vp,[player.x+.085,1.59+bob,player.z+.255],[.035,.045,.018],[.025,.035,.06]); // eyes
-          drawCube(vp,[player.x,1.34+bob,player.z+.02],[.39,.105,.3],[.95,.25,.38]); // coral scarf
-          drawCube(vp,[player.x+.13,1.21+bob,player.z+.18],[.1,.24,.06],[.95,.25,.38]); // scarf tail
-          drawCube(vp,[player.x,.89+bob,player.z-.29],[.24,.34,.12],[.12,.16,.27]); // explorer satchel
-          drawCube(vp,[player.x-.31,.93+bob,player.z],[.13,.43,.15],[.08,.23,.3]);drawCube(vp,[player.x+.31,.93+bob,player.z],[.13,.43,.15],[.08,.23,.3]);
-          drawCube(vp,[player.x-.14+swing,.32+bob,player.z-.015],[.14,.34,.16],[.12,.16,.22]);drawCube(vp,[player.x+.14-swing,.32+bob,player.z+.015],[.14,.34,.16],[.12,.16,.22]);
-          drawCube(vp,[player.x-.14+swing,.105,player.z+.055],[.17,.1,.23],[.025,.035,.075]);drawCube(vp,[player.x+.14-swing,.105,player.z+.055],[.17,.1,.23],[.025,.035,.075]);
-          drawCube(vp,[player.x+.37,1.03+bob,player.z+.04],[.11,.3,.12],[.72,.48,.34]);drawCube(vp,[player.x+.39,1.18+bob,player.z+.09],[.13,.15,.13],[.22,.85,1],1.6);
-          requestAnimationFrame(render)}
-          function move(){moving=Math.abs(joy.x)+Math.abs(joy.y)>.06;if(moving){let speed=.085;player.x+=joy.x*speed;player.z+=joy.y*speed;player.x=Math.max(-3.1,Math.min(3.1,player.x));player.z=Math.max(-21,Math.min(18,player.z));player.angle=Math.atan2(joy.x,-joy.y);walkTime+=.1;document.getElementById('objective').textContent='CHAPTER 1 · THE SILENT STREET · '+Math.round(Math.hypot(player.x,player.z-4))+'m explored'}requestAnimationFrame(move)}
-          const stick=document.getElementById('stick'),nub=document.getElementById('nub');let pointer=null;
-          stick.addEventListener('pointerdown',e=>{pointer=e.pointerId;stick.setPointerCapture(pointer);updateJoy(e)});stick.addEventListener('pointermove',e=>{if(pointer===e.pointerId)updateJoy(e)});function updateJoy(e){let r=stick.getBoundingClientRect(),dx=e.clientX-(r.left+r.width/2),dy=e.clientY-(r.top+r.height/2),max=37,l=Math.hypot(dx,dy)||1;if(l>max){dx=dx/l*max;dy=dy/l*max}joy.x=dx/max;joy.y=dy/max;nub.style.transform='translate('+dx+'px,'+dy+'px)'}function release(){pointer=null;joy.x=joy.y=0;nub.style.transform='translate(0,0)'}stick.addEventListener('pointerup',release);stick.addEventListener('pointercancel',release);
-          document.getElementById('start').onclick=()=>{started=true;document.getElementById('start').style.display='none';document.getElementById('story').textContent='STAGE 1 — THE QUIET STREET: Use the joystick and walk to the nearest blue light. Press INTERACT when you are close.';document.getElementById('toast').textContent='Use the joystick to walk.'};
-          document.getElementById('interact').onclick=()=>{let nearest=-1,dist=99;shardsPos.forEach((q,i)=>{let d=Math.hypot(player.x-q[0],player.z-q[1]);if(d<dist){dist=d;nearest=i}});if(nearest>=0&&dist<2.2&&nearest>=shards){shards++;document.getElementById('story').textContent=['A voice whispers: “The moon did not leave. It was hidden.”','A memory returns: a tower bell rang beneath a red sky.','The final fragment glows: “Find the tower beyond the river.”'][Math.min(shards-1,2)];document.getElementById('toast').textContent='Memory shard found · '+shards+'/3';document.getElementById('objective').textContent=shards===1?'CHAPTER 1 · STAGE 2/4: THE FORGOTTEN HOUSE':shards===2?'CHAPTER 1 · STAGE 3/4: STRANGE FOOTPRINTS':'CHAPTER 1 · STAGE 4/4: MEET MIRA';if(shards===1){document.getElementById('story').textContent='STAGE 2 — THE FORGOTTEN HOUSE: A memory shows a key beneath a broken lantern. Keep following the blue lights.';document.getElementById('toast').textContent='Stage 1 complete · New clue unlocked.'}if(shards===2){document.getElementById('story').textContent='STAGE 3 — STRANGE FOOTPRINTS: The trail leads deeper into the city. Find the last memory to discover who is waiting.';document.getElementById('toast').textContent='Stage 2 complete · The mystery gets harder.'}if(shards===3){document.getElementById('story').textContent='STAGE 4 — MEET MIRA: “I remember the moon,” says a voice in the fog. You found the truth hidden in the letter. Chapter 1 complete!';document.getElementById('toast').textContent='CHAPTER 1 COMPLETE · Chapter 2 unlocked soon.'}}else{document.getElementById('toast').textContent='No memory nearby. Follow the blue glow.';document.getElementById('story').textContent='Look for floating blue lights along the street, then press INTERACT nearby.'}};
-          document.getElementById('journal').onclick=()=>{document.getElementById('story').textContent='JOURNAL · '+shards+'/3 memories collected. Stages: 1 Quiet Street (easy), 2 Forgotten House (easy-medium), 3 Strange Footprints (medium), 4 Meet Mira (hard). Clue: the tower bell rang beneath a red sky.';document.getElementById('toast').textContent='Your discoveries are kept during this session.'};
-          render();move();
-          })();
-          </script></body></html>
-          EOF
-          curl -fsSL https://services.gradle.org/distributions/gradle-8.9-bin.zip -o /tmp/gradle.zip
-          unzip -q /tmp/gradle.zip -d /tmp
-          /tmp/gradle-8.9/bin/gradle --no-daemon assembleDebug
+          set -euo pipefail
+          test -f public/vendor/three.module.js
+          test -f public/vendor/addons/loaders/GLTFLoader.js
+          test -f public/assets/characters/character-male-a.glb
+          rm -rf android/app/src/main/assets/www
+          mkdir -p android/app/src/main/assets/www
+          cp -R public/. android/app/src/main/assets/www/
+          test -f android/app/src/main/assets/www/index.html
+          test -f android/app/src/main/assets/www/src/main.js
+          test -f android/app/src/main/assets/www/assets/characters/character-male-a.glb
 
-      - name: Upload APK artifact
+      - name: Build debug APK
+        run: gradle -p android --no-daemon clean assembleDebug
+
+      - name: Verify APK exists and is non-empty
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK='android/app/build/outputs/apk/debug/app-debug.apk'
+          test -s "$APK"
+          ls -lh "$APK"
+
+      - name: Upload verified APK
         uses: actions/upload-artifact@v4
         with:
           name: city-moon-3d-debug-apk
-          path: app/build/outputs/apk/debug/app-debug.apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
+          retention-days: 14
