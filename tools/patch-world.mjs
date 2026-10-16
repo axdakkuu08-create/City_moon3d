@@ -1,0 +1,16 @@
+import fs from 'node:fs';
+const p='public/src/world.js';
+let s=fs.readFileSync(p,'utf8');
+const a="export async function buildWorld(scene, onProgress, hooks) {\n  const rand = rng(7);";
+if(!s.includes(a)) throw new Error('world anchor missing');
+s=s.replace(a,"const nextFrame=()=>new Promise(r=>requestAnimationFrame(r));\n\nexport async function buildWorld(scene,onProgress,hooks){\n  const rand=rng(7);");
+s=s.replace("...bt], onProgress);","...bt], p=>onProgress&&onProgress(p*.2));");
+const b="  const add = async (f, x, z, ry = 0, s = 1) => { const o = await spawn(f); o.position.set(x, 0, z); o.rotation.y = ry; o.scale.setScalar(s * SC); staticGroup.add(o); return o; };";
+if(!s.includes(b)) throw new Error('add anchor missing');
+s=s.replace(b,"  const active=new Set(); let done=0;\n  const add=async(f,x,z,ry=0,scale=1)=>{ while(active.size>=12) await Promise.race(active); let job; job=(async()=>{ const o=await spawn(f); o.position.set(x,0,z); o.rotation.y=ry; o.scale.setScalar(scale*SC); staticGroup.add(o); done++; if(onProgress) onProgress(.2+Math.min(.55,done/289*.55)); await nextFrame(); return o; })(); active.add(job); try{return await job;}finally{active.delete(job);} }; ");
+s=s.replace("  await Promise.all(jobs);\n  mergeStatic(staticGroup, scene, hooks);","  await Promise.all(jobs);\n  if(onProgress) onProgress(.76);\n  await nextFrame();\n  await mergeStatic(staticGroup,scene,hooks,nextFrame);\n  if(onProgress) onProgress(.92);");
+s=s.replace("function mergeStatic(group, scene, hooks) {","async function mergeStatic(group,scene,hooks,nextFrame=()=>Promise.resolve()){");
+s=s.replace("  group.traverse(o => {\n    if (!o.isMesh) return;","  const meshes=[]; group.traverse(o=>{if(o.isMesh) meshes.push(o);});\n  for(let mi=0;mi<meshes.length;mi++){ const o=meshes[mi];");
+s=s.replace("    byMat.get(key).geos.push(g);\n  });","    byMat.get(key).geos.push(g);\n    if((mi+1)%24===0) await nextFrame();\n  }");
+s=s.replace("    const m = new THREE.Mesh(mergeGeometries(geos, false), mat); m.castShadow = m.receiveShadow = true; m.matrixAutoUpdate = false; scene.add(m); merged += geos.length;","    const m=new THREE.Mesh(mergeGeometries(geos,false),mat); m.castShadow=m.receiveShadow=true; m.matrixAutoUpdate=false; scene.add(m); merged+=geos.length; await nextFrame();");
+fs.writeFileSync(p,s);
