@@ -6,6 +6,7 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/build-apk.yml'
+      - 'city-moon-3d-v3.zip'
       - 'city-moon-3d-project-upgraded.zip'
       - 'public/**'
       - 'android/**'
@@ -33,15 +34,30 @@ jobs:
           set -euo pipefail
           if [[ -f public/index.html && -f android/settings.gradle.kts ]]; then
             echo "Using project files at repository root."
+          elif [[ -f city-moon-3d-v3.zip ]]; then
+            rm -rf .city-moon-v3
+            mkdir -p .city-moon-v3
+            unzip -oq city-moon-3d-v3.zip -d .city-moon-v3
+            if [[ -f .city-moon-v3/game/public/index.html && -f .city-moon-v3/game/android/settings.gradle.kts ]]; then
+              cp -a .city-moon-v3/game/. "$GITHUB_WORKSPACE/"
+              echo "Imported the v3 game from game/ into the runner project root."
+            elif [[ -f .city-moon-v3/public/index.html && -f .city-moon-v3/android/settings.gradle.kts ]]; then
+              cp -a .city-moon-v3/. "$GITHUB_WORKSPACE/"
+              echo "Imported the v3 game from the ZIP root."
+            else
+              echo "::error::city-moon-3d-v3.zip does not contain a supported public/ and android/ project layout."
+              find .city-moon-v3 -maxdepth 3 -type f | head -100
+              exit 1
+            fi
           elif [[ -f city-moon-3d-project-upgraded.zip ]]; then
             unzip -oq city-moon-3d-project-upgraded.zip -d "$GITHUB_WORKSPACE"
             echo "Extracted the upgraded project into the runner workspace."
           else
-            echo "::error::Missing upgraded source. Upload city-moon-3d-project-upgraded.zip to the repository root, or import its public/ and android/ folders."
+            echo "::error::Missing upgraded source. Upload city-moon-3d-v3.zip or city-moon-3d-project-upgraded.zip to the repository root, or import public/ and android/."
             exit 1
           fi
           if [[ ! -f public/index.html || ! -f android/settings.gradle.kts ]]; then
-            echo "::error::The upgraded source must contain public/ and android/ at the project root."
+            echo "::error::The selected source must contain public/ and android/ at the project root."
             exit 1
           fi
 
@@ -89,6 +105,7 @@ jobs:
           mkdir -p android/app/src/main/assets/www
           cp -R public/. android/app/src/main/assets/www/
           test -f android/app/src/main/assets/www/index.html
+          test -f android/app/src/main.js
           test -f android/app/src/main/assets/www/src/main.js
           test -f android/app/src/main/assets/www/assets/characters/character-male-a.glb
 
