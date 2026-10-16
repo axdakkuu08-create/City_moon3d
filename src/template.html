@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#0b0d18">
+<title>The City That Forgot the Moon</title>
+<style>
+:root{--bg:#0b0d18;--ink:#f4f2ff;--muted:#b9bdd2;--red:#e65d79;--blue:#87b8ff;--gold:#e8c98a;--line:#353b57}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family:system-ui,-apple-system,"Segoe UI",sans-serif;overflow:hidden;overscroll-behavior:none;user-select:none;-webkit-user-select:none;touch-action:none}
+canvas#gl{position:fixed;inset:0;width:100%;height:100%;display:block;outline:none}
+button{font:inherit;color:inherit;cursor:pointer}
+.hidden{display:none!important}
+.overlay{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;z-index:30;padding:18px;text-align:center}
+#loading{background:radial-gradient(ellipse at 50% 30%,#34304d,#0b0d18 70%);flex-direction:column;gap:18px;z-index:50}
+#loading h1,#title h1{font:500 clamp(2rem,7vw,4rem)/1.05 Georgia,serif;margin:0}
+.bar{width:min(320px,70vw);height:6px;background:#2a3047;border-radius:9px;overflow:hidden}.bar i{display:block;height:100%;width:0;background:linear-gradient(90deg,#8cbfff,#d87c9e);transition:width .15s}
+.eyebrow{color:var(--gold);font-size:.75rem;letter-spacing:.2em;text-transform:uppercase}
+#title{background:linear-gradient(180deg,#0b0d1855,#0b0d18ee 70%);flex-direction:column;gap:14px;justify-content:flex-end;padding-bottom:max(6vh,24px)}
+#title p{max-width:520px;color:#e0dfee;line-height:1.6;margin:0 0 6px}
+.primary{background:linear-gradient(135deg,#e96b82,#bd466e);color:#fff;border:0;border-radius:12px;padding:13px 22px;font-weight:700;box-shadow:0 8px 24px #c9436840}
+.secondary{background:#20253a;border:1px solid #414967;border-radius:12px;padding:12px 18px}
+.row{display:flex;gap:10px;flex-wrap:wrap;justify-content:center}
+#hud{position:fixed;inset:0;pointer-events:none;z-index:10}
+#hud>*{pointer-events:auto}
+#topLeft{position:absolute;left:max(12px,env(safe-area-inset-left));top:max(10px,env(safe-area-inset-top));max-width:46vw}
+#chapter{font-size:.68rem;letter-spacing:.14em;text-transform:uppercase;color:var(--gold)}
+#objective{margin-top:4px;font-size:.92rem;text-shadow:0 1px 6px #000}
+#frag{margin-top:4px;font-size:.8rem;color:#bfe9ff;text-shadow:0 1px 6px #000}
+#topRight{position:absolute;right:max(12px,env(safe-area-inset-right));top:max(10px,env(safe-area-inset-top));display:flex;gap:8px;flex-direction:column;align-items:flex-end}
+.pill{border:1px solid var(--line);background:#12162bcc;border-radius:999px;padding:7px 12px;font-size:.8rem;backdrop-filter:blur(6px)}
+.pill:hover{border-color:var(--blue)}
+#mapWrap{position:relative;width:112px;height:112px;border-radius:14px;overflow:hidden;border:1px solid var(--line);background:#0b0d18cc}
+#map{width:100%;height:100%;display:block}
+#compass{position:absolute;left:50%;top:max(14px,env(safe-area-inset-top));transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;pointer-events:none!important;gap:2px}
+#arrow{width:34px;height:34px;filter:drop-shadow(0 1px 4px #000)}#arrow svg{width:100%;height:100%}
+#dist{font-size:.72rem;color:var(--gold);text-shadow:0 1px 5px #000}
+#toast{position:fixed;left:50%;top:22%;transform:translate(-50%,-10px);opacity:0;background:#f0e6d2;color:#202033;padding:10px 16px;border-radius:14px;font:.9rem/1.4 Georgia,serif;max-width:min(86vw,460px);text-align:center;pointer-events:none;transition:.3s;z-index:40}
+#toast.show{opacity:1;transform:translate(-50%,0)}
+#dialogue{position:fixed;left:50%;bottom:max(10px,env(safe-area-inset-bottom));transform:translateX(-50%);width:min(760px,calc(100vw - 20px));max-height:72vh;overflow:auto;background:linear-gradient(180deg,#171b2df2,#0f1322f5);border:1px solid #454b69;border-radius:20px;padding:clamp(14px,3vw,24px);z-index:20;box-shadow:0 20px 80px #000a;touch-action:pan-y;user-select:text}
+#dlgTop{display:flex;justify-content:space-between;gap:8px;color:var(--gold);font-size:.7rem;letter-spacing:.12em;text-transform:uppercase}
+#dlgTitle{font:500 clamp(1.3rem,3.6vw,2rem)/1.15 Georgia,serif;margin:8px 0}
+#dlgText{font:clamp(.95rem,2.4vw,1.02rem)/1.7 Georgia,serif;color:#e7e5f1;white-space:pre-line}
+#dlgChoices{display:grid;gap:9px;margin-top:16px}
+.choice{width:100%;text-align:left;border:1px solid #414966;background:linear-gradient(135deg,#20263d,#171b2d);border-radius:13px;padding:12px 14px;line-height:1.4}
+.choice:hover,.choice:focus-visible{border-color:var(--red);background:#25263c;outline:none}
+.choice:before{content:"↳";color:var(--red);margin-right:10px}
+.choice small{opacity:.55;margin-left:8px}
+#modal{background:#050711cc;z-index:35}
+#modal .box{width:min(620px,100%);max-height:84vh;overflow:auto;background:#171b2d;border:1px solid #454b69;border-radius:20px;padding:22px;text-align:left;user-select:text;touch-action:pan-y}
+#modal h2{font:500 1.7rem Georgia,serif;margin:0 0 10px}#modal h3{margin:14px 0 6px;font-size:.95rem;color:var(--gold)}#modal p,#modal li{color:#d7d9e8;line-height:1.6;font-size:.92rem}
+#modal ul{padding-left:18px;margin:6px 0}
+#fade{position:fixed;inset:0;background:#000;opacity:0;pointer-events:none;transition:opacity .6s;z-index:45}
+/* touch controls */
+#touchMove,#touchLook{position:fixed;top:0;bottom:0;z-index:5;touch-action:none}
+#touchMove{left:0;width:46%;top:35%}#touchLook{right:0;width:54%}
+.touchOnly{display:none}
+body.touch .touchOnly{display:flex}
+body:not(.touch) #touchMove{display:none}
+body:not(.touch) #touchLook{left:0;width:100%}
+#joyBase,#joyKnob{position:fixed;border-radius:50%;pointer-events:none;z-index:8;display:none}
+#joyBase{width:116px;height:116px;border:2px solid #ffffff55;background:#ffffff14;margin:-58px 0 0 -58px}
+#joyKnob{width:52px;height:52px;background:#ffffff66;border:2px solid #ffffffaa;margin:-26px 0 0 -26px}
+#btns{position:absolute;right:max(14px,env(safe-area-inset-right));bottom:max(18px,env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:12px;align-items:center}
+.rbtn{width:70px;height:70px;border-radius:50%;border:2px solid #ffffff66;background:#12162bb0;font-weight:700;font-size:.8rem;backdrop-filter:blur(4px)}
+.rbtn:active,.rbtn.on{background:#e96b82aa}
+#hint{position:absolute;left:50%;bottom:max(16px,env(safe-area-inset-bottom));transform:translateX(-50%);font-size:.75rem;color:var(--muted);text-shadow:0 1px 5px #000;pointer-events:none!important;text-align:center}
+body.touch #hint{display:none}
+body.dlg #btns,body.dlg #hint,body.dlg #mapWrap{display:none}
+@media(max-width:700px){#mapWrap{width:84px;height:84px}#topLeft{max-width:42vw}}
+</style>
+</head>
+<body>
+<canvas id="gl" tabindex="0"></canvas>
+<div id="touchMove"></div><div id="touchLook"></div><div id="joyBase"></div><div id="joyKnob"></div>
+
+<div id="loading" class="overlay"><div class="eyebrow">Preparing the city</div><h1>The City That<br>Forgot the Moon</h1><div class="bar"><i id="loadBar"></i></div><div id="loadMsg" style="color:#8e94ad;font-size:.8rem">Unpacking models…</div></div>
+
+<div id="title" class="overlay hidden">
+  <div class="eyebrow">A 3D mystery in five chapters</div>
+  <h1>The City That<br>Forgot the Moon</h1>
+  <p>Every night, someone loses a memory. Tonight, Ren finds a letter in their own handwriting — warning them not to open the tower. Walk the city, gather lost memories, and choose what it remembers.</p>
+  <div class="row"><button class="primary" id="beginBtn">Begin the story</button><button class="secondary" id="continueBtn">Continue</button><button class="secondary" id="helpBtn">Controls</button></div>
+  <div style="color:#7e86a6;font-size:.72rem;margin-top:6px">Plays fully offline · Models by Kenney (CC0)</div>
+</div>
+
+<div id="hud" class="hidden">
+  <div id="topLeft"><div id="chapter"></div><div id="objective"></div><div id="frag"></div></div>
+  <div id="compass"><div id="arrow"><svg viewBox="0 0 24 24"><path d="M12 2 L20 20 L12 15 L4 20 Z" fill="#ffe3a3" stroke="#3a2a14" stroke-width="1.2" stroke-linejoin="round"/></svg></div><div id="dist"></div></div>
+  <div id="topRight">
+    <button class="pill" id="menuBtn">☰ Menu</button>
+    <button class="pill" id="journalBtn">Journal</button>
+    <div id="mapWrap"><canvas id="map" width="224" height="224"></canvas></div>
+  </div>
+  <div id="btns" class="touchOnly"><button class="rbtn" id="runBtn">RUN</button><button class="rbtn" id="jumpBtn">JUMP</button></div>
+  <div id="hint">WASD move · Shift run · Space jump · drag to look · J journal · M mute</div>
+</div>
+
+<div id="dialogue" class="hidden"><div id="dlgTop"><span id="dlgChapter"></span><span id="dlgScene"></span></div><h2 id="dlgTitle"></h2><div id="dlgText"></div><div id="dlgChoices"></div></div>
+<div id="modal" class="overlay hidden"><div class="box"><div id="modalBody"></div><div class="row" style="justify-content:flex-end;margin-top:16px" id="modalBtns"></div></div></div>
+<div id="toast"></div><div id="fade"></div>
+
+<script>/*ASSETS*/</script>
+<script>/*GAME*/</script>
+</body>
+</html>
