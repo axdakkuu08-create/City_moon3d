@@ -1,0 +1,41 @@
+name: Apply startup optimization
+
+on:
+  push:
+    branches:
+      - opt/startup-performance
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: ${{ !contains(github.event.head_commit.message, '[startup-patch]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Apply patch
+        run: node tools/apply-startup-optimization.mjs
+
+      - name: Validate patched JavaScript
+        shell: bash
+        run: |
+          set -euo pipefail
+          for file in public/src/*.js; do node --check "$file"; done
+
+      - name: Commit optimized source
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add public/src tools/apply-startup-optimization.mjs
+          git commit -m 'perf: optimize startup and city construction [startup-patch]'
+          git push origin HEAD:opt/startup-performance
