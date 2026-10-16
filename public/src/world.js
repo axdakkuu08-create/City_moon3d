@@ -72,14 +72,17 @@ function trainSet() {
   return g;
 }
 
-export async function buildWorld(scene, onProgress, hooks) {
-  const rand = rng(7);
+const nextFrame=()=>new Promise(r=>requestAnimationFrame(r));
+
+export async function buildWorld(scene,onProgress,hooks){
+  const rand=rng(7);
   const bt = 'abcdefghijklmnopqrstu'.split('').map(c => `buildings/building-type-${c}.glb`);
   await preload(['roads/road-straight.glb', 'roads/road-crossroad.glb', 'roads/light-square.glb', 'roads/light-curved.glb',
-    'buildings/tree-large.glb', 'buildings/tree-small.glb', ...bt], onProgress);
+    'buildings/tree-large.glb', 'buildings/tree-small.glb', ...bt], p=>onProgress&&onProgress(p*.2));
 
   const staticGroup = new THREE.Group(); scene.add(staticGroup);
-  const add = async (f, x, z, ry = 0, s = 1) => { const o = await spawn(f); o.position.set(x, 0, z); o.rotation.y = ry; o.scale.setScalar(s * SC); staticGroup.add(o); return o; };
+  const active=new Set(); let done=0;
+  const add=async(f,x,z,ry=0,scale=1)=>{ while(active.size>=12) await Promise.race(active); let job; job=(async()=>{ const o=await spawn(f); o.position.set(x,0,z); o.rotation.y=ry; o.scale.setScalar(scale*SC); staticGroup.add(o); done++; if(onProgress) onProgress(.2+Math.min(.55,done/289*.55)); await nextFrame(); return o; })(); active.add(job); try{return await job;}finally{active.delete(job);} }; 
   const jobs = [];
   const special = {}; for (const [k, L] of Object.entries(LOCATIONS)) if (L.lot) special[L.lot.join(',')] = k;
   const towerAt = (i, j) => i === 8 && j === 8;
@@ -103,7 +106,10 @@ export async function buildWorld(scene, onProgress, hooks) {
   const lights = [];
   for (let a = 0; a < ROADS; a++) for (let b = 0; b < ROADS; b++) jobs.push(add('roads/light-square.glb', tile(a * BLOCK) + SC * .4, tile(b * BLOCK) + SC * .4, 0, 1));
   await Promise.all(jobs);
-  mergeStatic(staticGroup, scene, hooks);
+  if(onProgress) onProgress(.76);
+  await nextFrame();
+  await mergeStatic(staticGroup,scene,hooks,nextFrame);
+  if(onProgress) onProgress(.92);
 
   // lamp glow: one additive Points draw call, placed at each lamp head (model arm extends -z by ~0.21 tile)
   {
@@ -132,11 +138,11 @@ export async function buildWorld(scene, onProgress, hooks) {
 
 // Merge static meshes that share a material AND sit in the same block-sized chunk: few draw calls, but frustum culling still works.
 const WHITE = new THREE.Color(1, 1, 1);
-function mergeStatic(group, scene, hooks) {
+async function mergeStatic(group,scene,hooks,nextFrame=()=>Promise.resolve()){
   group.updateMatrixWorld(true);
   const byMat = new Map();
-  group.traverse(o => {
-    if (!o.isMesh) return;
+  const meshes=[]; group.traverse(o=>{if(o.isMesh) meshes.push(o);});
+  for(let mi=0;mi<meshes.length;mi++){ const o=meshes[mi];
     const g = o.geometry.clone(); g.applyMatrix4(o.matrixWorld);
     for (const k of Object.keys(g.attributes)) if (!['position', 'normal', 'uv', 'color'].includes(k)) g.deleteAttribute(k);
     if (!g.index) g.setIndex([...Array(g.attributes.position.count).keys()]);
@@ -146,11 +152,12 @@ function mergeStatic(group, scene, hooks) {
     const wp = new THREE.Vector3().setFromMatrixPosition(o.matrixWorld);
     const key = o.material.uuid + '|' + Math.floor((wp.x + 60) / (BLOCK * SC * 2)) + '|' + Math.floor((wp.z + 60) / (BLOCK * SC * 2)); if (!byMat.has(key)) byMat.set(key, { mat: o.material, geos: [] });
     byMat.get(key).geos.push(g);
-  });
+    if((mi+1)%24===0) await nextFrame();
+  }
   let merged = 0;
   for (const { mat, geos } of byMat.values()) {
     mat.vertexColors = true; mat.needsUpdate = true; if (hooks) { if (!hooks.buildingMat.includes(mat)) hooks.buildingMat.push(mat); patchWindows(mat, hooks.winUniform); }
-    const m = new THREE.Mesh(mergeGeometries(geos, false), mat); m.castShadow = m.receiveShadow = true; m.matrixAutoUpdate = false; scene.add(m); merged += geos.length;
+    const m=new THREE.Mesh(mergeGeometries(geos,false),mat); m.castShadow=m.receiveShadow=true; m.matrixAutoUpdate=false; scene.add(m); merged+=geos.length; await nextFrame();
   }
   scene.remove(group);
   console.log(`merged ${merged} meshes into ${byMat.size}`);
