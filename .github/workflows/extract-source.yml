@@ -1,0 +1,45 @@
+name: Extract v3 source snapshot
+
+on:
+  push:
+    branches:
+      - opt/startup-performance
+
+permissions:
+  contents: read
+
+auto_cancel: false
+
+jobs:
+  extract:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Extract v3 source
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf .city-moon-v3 extracted-source city-moon-v3-source.zip
+          mkdir -p .city-moon-v3 extracted-source
+          unzip -q city-moon-3d-v3.zip -d .city-moon-v3
+          if [ -f .city-moon-v3/game/public/index.html ]; then
+            cp -a .city-moon-v3/game/. extracted-source/
+          elif [ -f .city-moon-v3/public/index.html ]; then
+            cp -a .city-moon-v3/. extracted-source/
+          else
+            echo 'Could not locate v3 public/index.html after extraction.' >&2
+            find .city-moon-v3 -maxdepth 4 -type f | head -100
+            exit 1
+          fi
+          cd extracted-source
+          zip -qr ../city-moon-v3-source.zip .
+
+      - name: Upload extracted source
+        uses: actions/upload-artifact@v4
+        with:
+          name: city-moon-v3-source-snapshot
+          path: city-moon-v3-source.zip
+          retention-days: 2
+          if-no-files-found: error
