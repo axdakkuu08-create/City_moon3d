@@ -8,8 +8,6 @@ on:
 permissions:
   contents: read
 
-auto_cancel: false
-
 jobs:
   extract:
     runs-on: ubuntu-latest
