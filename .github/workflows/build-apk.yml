@@ -3,7 +3,7 @@ name: Build City Moon 3D APK
 on:
   workflow_dispatch:
   push:
-    branches: [main]
+    branches: [main, fix/android-webview-startup-apk]
     paths:
       - '.github/workflows/build-apk.yml'
       - 'city-moon-3d-v3.zip'
@@ -124,6 +124,7 @@ jobs:
           dependencies {
               implementation("androidx.core:core-ktx:1.13.1")
               implementation("androidx.appcompat:appcompat:1.7.0")
+              implementation("androidx.webkit:webkit:1.11.0")
           }
           EOF
 
@@ -171,21 +172,26 @@ jobs:
           cat > android/app/src/main/java/com/citymoon/game/MainActivity.kt <<'EOF'
           package com.citymoon.game
 
+          import android.annotation.SuppressLint
           import android.app.Activity
-          import android.os.Bundle
           import android.graphics.Color
+          import android.os.Bundle
           import android.os.Handler
           import android.os.Looper
           import android.view.Gravity
           import android.view.View
+          import android.view.WindowManager
+          import android.webkit.WebChromeClient
+          import android.webkit.WebResourceRequest
+          import android.webkit.WebResourceResponse
+          import android.webkit.WebSettings
+          import android.webkit.WebView
+          import android.webkit.WebViewClient
           import android.widget.FrameLayout
           import android.widget.ImageView
           import android.widget.LinearLayout
           import android.widget.TextView
-          import android.webkit.WebChromeClient
-          import android.webkit.WebResourceRequest
-          import android.webkit.WebView
-          import android.webkit.WebViewClient
+          import androidx.webkit.WebViewAssetLoader
 
           class MainActivity : Activity() {
               private lateinit var webView: WebView
@@ -196,13 +202,15 @@ jobs:
               private fun dismissSplash() {
                   if (splashDismissed) return
                   splashDismissed = true
-                  splash.animate().alpha(0f).setDuration(350).withEndAction {
+                  splash.animate().alpha(0f).setDuration(300).withEndAction {
                       (splash.parent as? android.view.ViewGroup)?.removeView(splash)
                   }.start()
               }
 
+              @SuppressLint("SetJavaScriptEnabled")
               override fun onCreate(savedInstanceState: Bundle?) {
                   super.onCreate(savedInstanceState)
+                  window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
                   window.statusBarColor = Color.rgb(9, 13, 31)
                   window.navigationBarColor = Color.rgb(9, 13, 31)
                   window.decorView.systemUiVisibility = (
@@ -214,24 +222,32 @@ jobs:
                       View.SYSTEM_UI_FLAG_LAYOUT_STABLE
                   )
 
-                  val root = FrameLayout(this)
-                  webView = WebView(this)
-                  webView.setBackgroundColor(Color.rgb(9, 13, 31))
-                  webView.settings.javaScriptEnabled = true
-                  webView.settings.domStorageEnabled = true
-                  webView.settings.allowFileAccess = true
-                  webView.settings.allowContentAccess = true
-                  webView.settings.mediaPlaybackRequiresUserGesture = false
-                  webView.webChromeClient = WebChromeClient()
-                  webView.webViewClient = object : WebViewClient() {
-                      override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean = false
-                      override fun onPageFinished(view: WebView, url: String) {
-                          super.onPageFinished(view, url)
-                          handler.postDelayed({ dismissSplash() }, 900)
+                  val assetLoader = WebViewAssetLoader.Builder()
+                      .addPathHandler("/assets/", WebViewAssetLoader.AssetsPathHandler(this))
+                      .build()
+
+                  webView = WebView(this).apply {
+                      setBackgroundColor(Color.rgb(9, 13, 31))
+                      settings.javaScriptEnabled = true
+                      settings.domStorageEnabled = true
+                      settings.mediaPlaybackRequiresUserGesture = false
+                      settings.cacheMode = WebSettings.LOAD_DEFAULT
+                      settings.allowFileAccess = false
+                      settings.allowContentAccess = false
+                      webChromeClient = WebChromeClient()
+                      webViewClient = object : WebViewClient() {
+                          override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {
+                              return assetLoader.shouldInterceptRequest(request.url)
+                          }
+                          override fun onPageFinished(view: WebView, url: String) {
+                              super.onPageFinished(view, url)
+                              handler.postDelayed({ dismissSplash() }, 700)
+                          }
                       }
                   }
-                  root.addView(webView, FrameLayout.LayoutParams(-1, -1))
 
+                  val root = FrameLayout(this)
+                  root.addView(webView, FrameLayout.LayoutParams(-1, -1))
                   val splashLayout = LinearLayout(this).apply {
                       orientation = LinearLayout.VERTICAL
                       gravity = Gravity.CENTER
@@ -263,13 +279,20 @@ jobs:
                   root.addView(splash, FrameLayout.LayoutParams(-1, -1))
                   setContentView(root)
 
-                  // Keep a fallback so a slow or broken page cannot leave the splash forever.
-                  handler.postDelayed({ dismissSplash() }, 15000)
-                  webView.loadUrl("file:///android_asset/www/index.html")
+                  // Keep a fallback in case the page fails before onPageFinished.
+                  handler.postDelayed({ dismissSplash() }, 20000)
+                  webView.loadUrl("https://appassets.androidplatform.net/assets/www/index.html")
               }
 
               override fun onBackPressed() {
-                  if (webView.canGoBack()) webView.goBack() else super.onBackPressed()
+                  if (::webView.isInitialized && webView.canGoBack()) webView.goBack()
+                  else super.onBackPressed()
+              }
+
+              override fun onDestroy() {
+                  handler.removeCallbacksAndMessages(null)
+                  if (::webView.isInitialized) webView.destroy()
+                  super.onDestroy()
               }
           }
           EOF
