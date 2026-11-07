@@ -32,12 +32,14 @@ export function setupSky(scene, shadows = true, themeKey = 'crimson') {
   const cur = {}, tgt = {};
   const load = (o, t) => { for (const k of COL) o[k] = new THREE.Color(t[k]); for (const k of NUM) o[k] = t[k]; };
   load(cur, THEMES[themeKey]); load(tgt, THEMES[themeKey]);
-  const hooks = { buildingMat: [], winUniform: { value: 1 }, lamps: [], renderer: null, fogMul: { value: 1 }, glow: [] };
+  const hooks = { buildingMat: [], winUniform: { value: 1 }, lamps: [], renderer: null, fogMul: { value: 1 }, glow: [], moonProgression: { value: 0 } };
   function paint() {
     dome.material.uniforms.top.value.copy(cur.domeTop); dome.material.uniforms.mid.value.copy(cur.domeMid); dome.material.uniforms.hor.value.copy(cur.domeHor);
     scene.background = cur.domeMid; scene.fog.color.copy(cur.fog); scene.fog.near = cur.fogNear * hooks.fogMul.value; scene.fog.far = cur.fogFar * hooks.fogMul.value;
-    moon.material.color.copy(cur.moon); glow.material.color.copy(cur.halo); glow.material.opacity = cur.haloA;
-    hemi.color.copy(cur.hemiSky); hemi.groundColor.copy(cur.hemiGnd); hemi.intensity = cur.hemiI; sun.color.copy(cur.sun); sun.intensity = cur.sunI;
+    const restoration = Math.max(0, Math.min(1, hooks.moonProgression.value));
+    moon.material.color.copy(cur.moon); moon.scale.setScalar(1 + restoration * .04);
+    glow.material.color.copy(cur.halo); glow.material.opacity = Math.min(1, cur.haloA + restoration * .16);
+    hemi.color.copy(cur.hemiSky); hemi.groundColor.copy(cur.hemiGnd); hemi.intensity = cur.hemiI + restoration * .08; sun.color.copy(cur.sun); sun.intensity = cur.sunI;
     gmat.color.copy(cur.ground); stars.material.opacity = cur.stars * .9; stars.visible = cur.stars > .02;
     hooks.winUniform.value = cur.win; for (const m of hooks.buildingMat) m.color.copy(cur.bld); for (const l of hooks.lamps) l.color.copy(cur.lamp);
     if (hooks.renderer) hooks.renderer.toneMappingExposure = cur.exposure;
