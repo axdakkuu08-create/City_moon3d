@@ -316,7 +316,7 @@ jobs:
             exit 1
           fi
           for file in "${js_files[@]}"; do
-            node --check "$file"
+            node --experimental-default-type=module --check "$file"
           done
           if [[ -f tools/test-source.mjs ]]; then
             node --check tools/test-source.mjs
