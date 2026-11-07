@@ -8,11 +8,14 @@ import { Sound } from './audio.js';
 import { Weather } from './weather.js';
 import { createWalkers, updateWalkers } from './walkers.js';
 import { THEMES, THEME_KEYS } from './themes.js';
+import { SaveSystem, MemoryManager } from './persistence.js';
 
 const $ = id => document.getElementById(id);
-const SAVE_KEY = 'cityMoon3dSave', PREF_KEY = 'cityMoon3dPrefs';
-const lsGet = k => { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } };
-const lsSet = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { } };
+const PREF_KEY = 'cityMoon3dPrefs';
+const storage = (() => { try { return window.localStorage; } catch (e) { return null; } })();
+const saveSystem = new SaveSystem(storage);
+const lsGet = k => { try { return JSON.parse(storage?.getItem(k) ?? 'null'); } catch (e) { return null; } };
+const lsSet = (k, v) => { try { storage?.setItem(k, JSON.stringify(v)); return true; } catch (e) { return false; } };
 const prefs = Object.assign({ theme: 'auto', weather: 'rain', quality: matchMedia('(pointer:coarse)').matches ? 'low' : 'high', sound: true }, lsGet(PREF_KEY) || {});
 const HIGH = prefs.quality === 'high';
 
@@ -72,7 +75,8 @@ const orbs = [];
 // ---------- game state ----------
 const fresh = () => ({ scene: 'opening', pending: 'opening', loc: 'home', trust: 0, clues: [], compassion: 0, orbs: [], history: [], flags: {}, pos: [0, 18], yaw: 0 });
 let state = fresh(), mode = 'title';   // title | play | dialog
-const save = () => { state.pos = [player.pos.x, player.pos.z]; state.yaw = rig.yaw; lsSet(SAVE_KEY, state); };
+const save = () => { state.pos = [player.pos.x, player.pos.z]; state.yaw = rig.yaw; return saveSystem.save(state); };
+const memoryManager = new MemoryManager(orbs.map(o => o.userData.id), progress => { sky.hooks.moonProgression.value = progress; });
 function toast(msg, ms = 2200) { const t = $('toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(toast.h); toast.h = setTimeout(() => t.classList.remove('show'), ms); }
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
@@ -80,7 +84,7 @@ function hud() {
   $('sTrust').textContent = state.trust; $('sClues').textContent = state.clues.length; $('sComp').textContent = state.compassion;
   $('sOrbs').textContent = state.orbs.length + '/' + orbs.length;
 }
-function applyOrbs() { orbs.forEach(o => { o.userData.got = state.orbs.includes(o.userData.id); o.visible = !o.userData.got; }); }
+function applyOrbs() { memoryManager.sync(state); orbs.forEach(o => { o.userData.got = state.orbs.includes(o.userData.id); o.visible = !o.userData.got; }); }
 
 // ---------- NPC staging ----------
 function hideNpcs() { Object.values(npcs).forEach(n => { n.root.visible = false; n.col = null; }); for (let i = colliders.length - 1; i >= 0; i--) if (colliders[i].npc) colliders.splice(i, 1); }
@@ -119,7 +123,7 @@ function choose(c) {
   if (e.clue && !state.clues.includes(e.clue)) { state.clues.push(e.clue); gained = true; }
   if (c.log) state.flags[c.log] = true;
   $('dialog').classList.remove('show'); document.body.classList.remove('dlg'); hud();
-  if (c.next === 'home') { state = fresh(); lsSet(SAVE_KEY, null); hideNpcs(); showTitle(); return; }
+  if (c.next === 'home') { state = fresh(); saveSystem.clear(); hideNpcs(); showTitle(); return; }
   mode = 'play'; input.enabled = true; hideNpcsSoon();
   if (gained) { player.once('pick-up', .9); toast('Clue found: ' + e.clue); sound.chime(); }
   queueScene(c.next); save();
@@ -154,21 +158,22 @@ $('btnMenu').onclick = () => modal('Menu', `<div class="row"><button class="choi
 document.addEventListener('click', e => {
   if (e.target.id === 'mTheme') cycleTheme();
   if (e.target.id === 'mWeather') cycleWeather();
-  if (e.target.id === 'mSave') { save(); toast('Saved'); $('modal').classList.remove('show'); }
+  if (e.target.id === 'mSave') { const ok = save(); toast(ok ? 'Saved' : 'Save failed — storage unavailable'); if (ok) $('modal').classList.remove('show'); }
   if (e.target.id === 'mTitleBtn') { save(); $('modal').classList.remove('show'); hideNpcs(); showTitle(); }
 });
 
 // ---------- title ----------
 function showTitle() {
   mode = 'title'; applyTheme(); input.enabled = false; $('title').classList.remove('hidden'); $('hudTop').classList.add('hidden'); $('mini').classList.add('hidden'); $('controls').classList.add('hidden'); beacon.visible = false;
-  $('btnContinue').style.display = lsGet(SAVE_KEY) ? '' : 'none';
+  $('btnContinue').style.display = saveSystem.hasSave() ? '' : 'none';
   $('btnQuality').textContent = 'Graphics: ' + (HIGH ? 'High' : 'Low (battery saver)');
 }
 function enterGame() { setTimeout(applyTheme, 0); $('title').classList.add('hidden'); $('hudTop').classList.remove('hidden'); $('mini').classList.remove('hidden'); $('controls').classList.remove('hidden'); mode = 'play'; input.enabled = true; hud(); applyOrbs(); sound.start(); sound.setOn(prefs.sound); }
-$('btnBegin').onclick = () => { state = fresh(); player.pos.set(0, 0, 18); player.vel.set(0, 0, 0); rig.yaw = 0; rig.target.set(0, 1.6, 18); enterGame(); lsSet(SAVE_KEY, null); applyOrbs(); setTimeout(() => openScene('opening'), 900); };
+$('btnBegin').onclick = () => { state = fresh(); player.pos.set(0, 0, 18); player.vel.set(0, 0, 0); rig.yaw = 0; rig.target.set(0, 1.6, 18); enterGame(); saveSystem.clear(); applyOrbs(); setTimeout(() => openScene('opening'), 900); };
 $('btnContinue').onclick = () => {
-  const s = lsGet(SAVE_KEY); if (!s) return; state = Object.assign(fresh(), s);
+  const s = saveSystem.load(fresh()); if (!s) return; state = s;
   player.pos.set(state.pos[0], 0, state.pos[1]); rig.yaw = state.yaw || 0; rig.target.set(state.pos[0], 1.6, state.pos[1]); enterGame();
+  applyOrbs();
   if (state.pending) queueScene(state.pending); else if (story[state.scene]?.ending) { /* ended */ }
 };
 // Auto theme: the sky follows the story. chapter -> look, endings get their own colours.
@@ -228,10 +233,14 @@ function frame() {
     if (mode === 'play') {
       checkArrive();
       for (const o of orbs) if (!o.userData.got && Math.hypot(o.position.x - player.pos.x, o.position.z - player.pos.z) < 1.9) {
-        o.userData.got = true; o.visible = false; state.orbs.push(o.userData.id); sound.chime(); player.once('pick-up', .8);
+        const result = memoryManager.collect(o.userData.id, state, save, next => {
+          if (next.orbs.length === 5 && !next.clues.includes('Moon fragments')) next.clues.push('Moon fragments');
+        });
+        if (result.status !== 'collected') { if (result.status === 'persistence-failed') toast('Could not save memory — storage unavailable'); continue; }
+        o.userData.got = true; o.visible = false; sound.chime(); player.once('pick-up', .8);
         toast(`Memory fragment ${state.orbs.length}/${orbs.length}`);
-        if (state.orbs.length === 5 && !state.clues.includes('Moon fragments')) { state.clues.push('Moon fragments'); setTimeout(() => toast('Clue found: Moon fragments'), 1700); }
-        hud(); save();
+        if (state.orbs.length === 5 && state.clues.includes('Moon fragments')) setTimeout(() => toast('Clue found: Moon fragments'), 1700);
+        hud();
       }
       // objective HUD
       const p = state.pending && story[state.pending], L = p && LOCATIONS[p.loc];
