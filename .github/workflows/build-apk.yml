@@ -3,7 +3,7 @@ name: Build City Moon 3D APK
 on:
   workflow_dispatch:
   push:
-    branches: [main, fix/android-webview-startup-apk]
+    branches: [main, fix/android-webview-startup-apk, feat/save-memory-persistence]
     paths:
       - '.github/workflows/build-apk.yml'
       - 'city-moon-3d-v3.zip'
@@ -11,6 +11,7 @@ on:
       - 'public/**'
       - 'android/**'
       - 'tools/test-source.mjs'
+      - 'tools/test-persistence.mjs'
       - 'PLAN.md'
       - 'assets/**'
 
@@ -322,6 +323,12 @@ jobs:
             node tools/test-source.mjs
           else
             echo "tools/test-source.mjs not present in this v3 source package; skipping optional helper test."
+          fi
+          if [[ -f tools/test-persistence.mjs ]]; then
+            node --experimental-default-type=module tools/test-persistence.mjs
+          else
+            echo "::error::Persistence regression tests are required but missing."
+            exit 1
           fi
 
       - name: Set up Java 17
